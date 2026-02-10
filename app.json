@@ -41,7 +41,9 @@
           "recordAudioAndroid": true
         }
       ],
-      ["expo-font"]
+      [
+        "expo-font"
+      ]
     ],
     "experiments": {
       "typedRoutes": true
@@ -51,7 +53,7 @@
         "origin": false
       },
       "eas": {
-        "projectId": "79f7f43d-fa80-40a3-89df-8c2c5ce43f4a"
+        "projectId": "e433f5a0-8953-4590-83ab-fc9dd19a95a7"
       }
     }
   }
