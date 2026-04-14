@@ -1,0 +1,60 @@
+{
+  "expo": {
+    "name": "SCANTEATE",
+    "slug": "scanteate",
+    "version": "1.0.7",
+    "orientation": "portrait",
+    "icon": "./assets/images/LogoApp-SCAN.png",
+    "scheme": "myapp",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/images/LogoApp-SCAN.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/LogoApp-SCAN.png",
+        "backgroundColor": "#ffffff"
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.iamdenyl.scanteate"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/logo-scan.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permite que SCANTEATE acceda a tu camara",
+          "microphonePermission": "Permite que SCANTEATE acceda a tu microfono",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-font"
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "e433f5a0-8953-4590-83ab-fc9dd19a95a7"
+      }
+    }
+  }
+}
