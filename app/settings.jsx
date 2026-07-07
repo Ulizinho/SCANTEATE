@@ -10,68 +10,79 @@ import {
   Pressable,
   StatusBar,
   StyleSheet,
-  Linking, // <-- IMPORTANTE: para abrir URLs externas
+  Linking,
+  ToastAndroid,
 } from 'react-native';
 
 import Tabs from '../components/Tabs';
 import UserAvatar from '../components/UserAvatar';
+import { useBiometrics } from '../hooks/useBiometrics';
 
 export default function Settings() {
-  const [user, setUser] = useState({
-    id: 0,
-    name: '',
-    type: '',
-  });
+  const [user, setUser] = useState({ id: 0, name: '', type: '' });
+  const [bunkerActivo, setBunkerActivo] = useState(false);
 
-  const getUser = async () => {
+  const { pedir } = useBiometrics();
+
+  const getData = async () => {
+    // Cargar usuario
     const data = await AsyncStorage.getItem('user');
-    if (data) {
-      setUser(JSON.parse(data));
-    }
+    if (data) setUser(JSON.parse(data));
+
+    // Cargar estado del búnker
+    const res = await AsyncStorage.getItem('timerConfig');
+    const timerData = res ? JSON.parse(res) : null;
+    setBunkerActivo(!!timerData?.activo);
   };
 
   useFocusEffect(
     useCallback(() => {
-      getUser();
+      getData();
     }, [])
   );
 
   const logout = async () => {
+    // Si el búnker está activo, ni siquiera pedimos huella, bloqueamos directo
+    if (bunkerActivo) {
+      mostrarAvisoBloqueo();
+      return;
+    }
+    const ok = await pedir('Identifícate para cerrar sesión');
+    if (!ok) return;
     await AsyncStorage.removeItem('user');
     router.replace('/loginBefore');
   };
 
+  const mostrarAvisoBloqueo = () => {
+    ToastAndroid.showWithGravity(
+      '🔒 Búnker Activo: Configuración bloqueada',
+      ToastAndroid.SHORT,
+      ToastAndroid.CENTER
+    );
+  };
+
+  const manejarPresion = (item) => {
+    if (bunkerActivo && item.protegido) {
+      mostrarAvisoBloqueo();
+      return;
+    }
+
+    if (item.route === 'logout') {
+      logout();
+    } else if (item.route === 'gotoweb') {
+      Linking.openURL('https://scanteate.com');
+    } else {
+      router.navigate(item.route);
+    }
+  };
+
   const settingsButtons = [
-    {
-      route: '/createAvatar',
-      image: require('../assets/images/bo_avatarv2.png'),
-      marginBottom: 0,
-    },
-    {
-      route: '/galery',
-      image: require('../assets/images/bo_galeriav2.png'),
-      marginBottom: -25,
-    },
-    {
-      route: '/reportConfig',
-      image: require('../assets/images/bo_reportv2.png'),
-      marginBottom: 0,
-    },
-    {
-      route: '/miInfo',
-      image: require('../assets/images/bo_reportv2.png'), // TODO: cambiar por imagen propia cuando la tengas
-      marginBottom: 0,
-    },
-    {
-      route: 'gotoweb',
-      image: require('../assets/images/bo_web.png'),
-      marginBottom: -30,
-    },
-    {
-      route: 'logout',
-      image: require('../assets/images/bo_logoutv2.png'),
-      marginBottom: -30,
-    },
+    { route: '/createAvatar', image: require('../assets/images/bo_avatarv2.png'), marginBottom: 0, protegido: false },
+    { route: '/galery', image: require('../assets/images/bo_galeriav2.png'), marginBottom: -25, protegido: false },
+    { route: '/reportConfig', image: require('../assets/images/bo_reportv2.png'), marginBottom: 0, protegido: true },
+    { route: '/miInfo', image: require('../assets/images/bo_miinfo.png'), marginBottom: 0, protegido: true },
+    { route: 'gotoweb', image: require('../assets/images/bo_web.png'), marginBottom: -30, protegido: true },
+    { route: 'logout', image: require('../assets/images/bo_logoutv2.png'), marginBottom: -30, protegido: true },
   ];
 
   return (
@@ -95,25 +106,30 @@ export default function Settings() {
 
       <View style={styles.container}>
         <ScrollView contentContainerStyle={{ paddingBottom: 100, paddingTop: 30 }}>
-          {settingsButtons.map((item, index) => (
-            <Pressable
-              key={index}
-              onPress={
-                item.route === 'logout'
-                  ? logout
-                  : item.route === 'gotoweb'
-                  ? () => Linking.openURL('https://scanteate.com')
-                  : () => router.navigate(item.route)
-              }
-              style={[styles.buttonContainer, { marginBottom: item.marginBottom }]}
-            >
-              <Image
-                source={item.image}
-                style={styles.buttonImage}
-                resizeMode="cover"
-              />
-            </Pressable>
-          ))}
+          {settingsButtons.map((item, index) => {
+            const bloqueado = bunkerActivo && item.protegido;
+            return (
+              <Pressable
+                key={index}
+                onPress={() => manejarPresion(item)}
+                style={[
+                  styles.buttonContainer, 
+                  { marginBottom: item.marginBottom, opacity: bloqueado ? 0.4 : 1 }
+                ]}
+              >
+                <Image
+                  source={item.image}
+                  style={styles.buttonImage}
+                  resizeMode="cover"
+                />
+                {bloqueado && (
+                  <View style={styles.lockBadge}>
+                    <Text style={{fontSize: 18}}>🔒</Text>
+                  </View>
+                )}
+              </Pressable>
+            );
+          })}
         </ScrollView>
       </View>
 
@@ -123,17 +139,15 @@ export default function Settings() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  buttonContainer: {
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  buttonImage: {
-    width: '100%',
-    maxWidth: 300,
-    height: 300,
-    alignSelf: 'center',
-  },
+  container: { flex: 1 },
+  buttonContainer: { paddingHorizontal: 16, alignItems: 'center', position: 'relative' },
+  buttonImage: { width: '100%', maxWidth: 300, height: 300, alignSelf: 'center' },
+  lockBadge: {
+    position: 'absolute',
+    top: '45%',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 50,
+    padding: 8,
+    elevation: 5
+  }
 });

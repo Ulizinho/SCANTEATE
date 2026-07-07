@@ -120,7 +120,8 @@ const cardClickFunction = (card) => {
     setSelectedCards(updatedSelectedCards);
     setCards(updatedCards);
 
-    // Reproducir nombre de la carta
+    // Reproducir nombre de la carta inmediatamente
+    Speech.stop();
     Speech.speak(card.name, { language: 'es-MX' });
 
     if (updatedSelectedCards.length === 2) {

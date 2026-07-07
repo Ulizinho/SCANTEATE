@@ -5,31 +5,26 @@
     "version": "1.0.7",
     "orientation": "portrait",
     "icon": "./assets/images/LogoApp-SCAN.png",
-    "scheme": "myapp",
-    "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/images/LogoApp-SCAN.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "scheme": "scanteate-app",
     "ios": {
       "supportsTablet": true
     },
     "android": {
+      "package": "com.scanteate.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/LogoApp-SCAN.png",
         "backgroundColor": "#ffffff"
       },
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
-      ],
-      "package": "com.iamdenyl.scanteate"
-    },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/logo-scan.png"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.INTERNET",
+        "android.permission.VIBRATE",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" 
+      ]
     },
     "plugins": [
       "expo-router",
@@ -37,21 +32,22 @@
         "expo-camera",
         {
           "cameraPermission": "Permite que SCANTEATE acceda a tu camara",
-          "microphonePermission": "Permite que SCANTEATE acceda a tu microfono",
-          "recordAudioAndroid": true
+          "microphonePermission": "Permite que SCANTEATE acceda a tu microfono"
         }
       ],
+      "expo-font",
       [
-        "expo-font"
+        "expo-build-properties",
+        {
+          "android": {
+            "newArchEnabled": false,
+            "ndkVersion": "26.1.10909125",
+            "enableProguardInReleaseBuilds": false 
+          }
+        }
       ]
     ],
-    "experiments": {
-      "typedRoutes": true
-    },
     "extra": {
-      "router": {
-        "origin": false
-      },
       "eas": {
         "projectId": "e433f5a0-8953-4590-83ab-fc9dd19a95a7"
       }

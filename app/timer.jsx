@@ -1,27 +1,21 @@
 import { useState, useCallback, useRef } from 'react';
 import {
   View, Text, Pressable, StyleSheet, StatusBar,
-  ToastAndroid, FlatList, Dimensions,
+  ToastAndroid, FlatList, Switch,
 } from 'react-native';
+import Slider from '@react-native-community/slider'; 
 import { router } from 'expo-router';
 import { AntDesign } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { useBiometrics } from '../hooks/useBiometrics';
 
-const ITEM_H = 52; // altura de cada número en el carrusel
-
-// Genera array del 0 al max
+const ITEM_H = 52;
 const rango = (max) => Array.from({ length: max + 1 }, (_, i) => i);
 
-// Carrusel vertical tipo picker
 function ScrollPicker({ value, max, onChange, label }) {
   const listRef = useRef(null);
   const datos = rango(max);
-
-  const scrollTo = (val) => {
-    listRef.current?.scrollToIndex({ index: val, animated: true });
-  };
 
   const onScrollEnd = (e) => {
     const idx = Math.round(e.nativeEvent.contentOffset.y / ITEM_H);
@@ -31,7 +25,6 @@ function ScrollPicker({ value, max, onChange, label }) {
 
   return (
     <View style={sp.container}>
-      {/* Indicador central */}
       <View style={sp.selIndicator} pointerEvents="none" />
       <FlatList
         ref={listRef}
@@ -44,16 +37,13 @@ function ScrollPicker({ value, max, onChange, label }) {
         getItemLayout={(_, index) => ({ length: ITEM_H, offset: ITEM_H * index, index })}
         initialScrollIndex={value}
         contentContainerStyle={{ paddingVertical: ITEM_H }}
-        renderItem={({ item }) => {
-          const activo = item === value;
-          return (
-            <Pressable style={sp.item} onPress={() => { onChange(item); scrollTo(item); }}>
-              <Text style={[sp.numText, activo && sp.numTextActivo]}>
-                {String(item).padStart(2, '0')}
-              </Text>
-            </Pressable>
-          );
-        }}
+        renderItem={({ item }) => (
+          <View style={sp.item}>
+            <Text style={[sp.numText, item === value && sp.numTextActivo]}>
+              {String(item).padStart(2, '0')}
+            </Text>
+          </View>
+        )}
       />
       <Text style={sp.label}>{label}</Text>
     </View>
@@ -61,255 +51,204 @@ function ScrollPicker({ value, max, onChange, label }) {
 }
 
 export default function Timer() {
-  const [horas,    setHoras]    = useState(0);
-  const [minutos,  setMinutos]  = useState(30);
+  const [horas, setHoras] = useState(0);
+  const [minutos, setMinutos] = useState(30);
   const [segundos, setSegundos] = useState(0);
-  const [activo,   setActivo]   = useState(false);
+  const [activo, setActivo] = useState(false);
+  const [pausado, setPausado] = useState(false);
+  const [segundosCongelados, setSegundosCongelados] = useState(0);
   const [autorizado, setAutorizado] = useState(false);
+  
+  const [volumen, setVolumen] = useState(0.5);
+  const [conVibracion, setConVibracion] = useState(true);
+  
   const { pedir } = useBiometrics();
 
   useFocusEffect(useCallback(() => {
-    setAutorizado(false);
     const verificar = async () => {
-      const ok = await pedir('Identifícate para configurar el timer');
-      if (!ok) { router.back(); return; }
-      setAutorizado(true);
-      cargar();
-    };
-    verificar();
-  }, []));
+      await AsyncStorage.setItem('huellaAbierta', 'true');
+      const ok = await pedir('Acceso al Panel de Control');
+      await AsyncStorage.removeItem('huellaAbierta');
 
-  const cargar = async () => {
-    try {
-      const data = JSON.parse(await AsyncStorage.getItem('timerConfig'));
-      if (data) {
+      if (!ok) {
+        router.back();
+        return;
+      }
+      
+      setAutorizado(true);
+      const res = await AsyncStorage.getItem('timerConfig');
+      if (res) {
+        const data = JSON.parse(res);
         setHoras(data.horas || 0);
         setMinutos(data.minutos ?? 30);
         setSegundos(data.segundos || 0);
         setActivo(data.activo || false);
+        setPausado(data.pausado || false);
+        setSegundosCongelados(data.segundosRestantes || 0);
+        setVolumen(data.volumen ?? 0.5);
+        setConVibracion(data.conVibracion ?? true);
       }
-    } catch (e) {}
-  };
+    };
+    verificar();
+  }, []));
 
   const guardarYActivar = async () => {
     const totalSeg = horas * 3600 + minutos * 60 + segundos;
     if (totalSeg < 10) {
-      ToastAndroid.showWithGravity('Configura al menos 10 segundos', ToastAndroid.LONG, ToastAndroid.CENTER);
+      ToastAndroid.show('Configura al menos 10 segundos', ToastAndroid.SHORT);
       return;
     }
-    await AsyncStorage.setItem('timerConfig', JSON.stringify({
+    
+    const config = {
       horas, minutos, segundos,
+      volumen,
+      conVibracion,
       activo: true,
+      pausado: false,
+      alertaActivada: false, 
       finEpoch: Date.now() + totalSeg * 1000,
-    }));
-    ToastAndroid.showWithGravity('⏱ Timer activado', ToastAndroid.SHORT, ToastAndroid.CENTER);
+    };
+
+    await AsyncStorage.setItem('timerConfig', JSON.stringify(config));
+    ToastAndroid.show('⏱ Búnker activado', ToastAndroid.SHORT);
+    router.replace('/home');
+  };
+
+  const reanudar = async () => {
+    const res = await AsyncStorage.getItem('timerConfig');
+    const data = JSON.parse(res);
+
+    const config = {
+      ...data,
+      pausado: false,
+      alertaActivada: false,
+      finEpoch: Date.now() + (segundosCongelados * 1000), // Retoma desde donde se quedó
+    };
+
+    await AsyncStorage.setItem('timerConfig', JSON.stringify(config));
+    ToastAndroid.show('▶️ Búnker Reanudado', ToastAndroid.SHORT);
     router.replace('/home');
   };
 
   const desactivar = async () => {
-    const ok = await pedir('Pon tu huella para desactivar el timer');
-    if (!ok) return;
-    await AsyncStorage.setItem('timerConfig', JSON.stringify({ activo: false }));
-    setActivo(false);
-    ToastAndroid.showWithGravity('Timer desactivado', ToastAndroid.SHORT, ToastAndroid.CENTER);
+    await AsyncStorage.setItem('huellaAbierta', 'true');
+    const ok = await pedir('Confirmar Desactivación');
+    await AsyncStorage.removeItem('huellaAbierta');
+    
+    if (ok) {
+      await AsyncStorage.removeItem('timerConfig');
+      setActivo(false);
+      setPausado(false);
+      ToastAndroid.show('🛡️ Búnker Liberado', ToastAndroid.SHORT);
+      router.replace('/home');
+    }
   };
 
   if (!autorizado) return <View style={{ flex: 1, backgroundColor: '#f1f5f9' }} />;
 
-  const totalSeg = horas * 3600 + minutos * 60 + segundos;
-
   return (
     <View style={{ flex: 1, backgroundColor: '#f1f5f9' }}>
-      <StatusBar backgroundColor="#0d5692" hidden={false} translucent={true} />
-      <View style={{ marginTop: StatusBar.currentHeight }} />
+      <StatusBar backgroundColor="#0d5692" barStyle="light-content" translucent={true} />
+      <View style={{ marginTop: StatusBar.currentHeight + 15 }} />
 
-      {/* Header */}
       <View style={s.header}>
         <Pressable style={s.backBtn} onPress={() => router.back()}>
           <AntDesign name="left" size={22} color="#fff" />
         </Pressable>
-        <View style={{ flex: 1 }}>
-          <Text style={s.headerTitle}>Timer de uso</Text>
-          <Text style={s.headerSub}>Controla el tiempo en la app</Text>
-        </View>
+        <Text style={s.headerTitle}>Panel del Búnker</Text>
       </View>
 
       <View style={{ padding: 16 }}>
-
-        {/* Banner timer activo */}
         {activo && (
-          <View style={s.activoBanner}>
-            <Text style={s.activoBannerText}>⏱ Timer activo</Text>
+          <View style={[s.activoBanner, pausado && s.pausadoBanner]}>
+            <View>
+              <Text style={[s.activoBannerText, pausado && {color: '#92400e'}]}>
+                {pausado ? '⏸️ BÚNKER EN PAUSA' : '🛡️ SISTEMA PROTEGIDO'}
+              </Text>
+              <Text style={{fontSize: 10, color: pausado ? '#92400e' : '#1e293b'}}>
+                {pausado ? 'El tiempo no está corriendo' : 'El tiempo está corriendo'}
+              </Text>
+            </View>
             <Pressable style={s.desactivarBtn} onPress={desactivar}>
-              <Text style={s.desactivarText}>Desactivar</Text>
+              <Text style={s.desactivarText}>Liberar</Text>
             </Pressable>
           </View>
         )}
 
-        {/* Carrusel de tiempo */}
         <View style={s.card}>
-          <Text style={s.cardTitle}>⏰ Desliza para configurar el tiempo</Text>
-          <Text style={s.cardSub}>Desliza arriba o abajo en cada columna</Text>
-
+          <Text style={s.cardTitle}>⏰ Tiempo de Bloqueo</Text>
           <View style={s.carruselRow}>
-            <ScrollPicker value={horas}    max={23} onChange={setHoras}    label="horas"    />
+            <ScrollPicker value={horas} max={23} onChange={setHoras} label="hrs" />
             <Text style={s.sep}>:</Text>
-            <ScrollPicker value={minutos}  max={59} onChange={setMinutos}  label="min"      />
+            <ScrollPicker value={minutos} max={59} onChange={setMinutos} label="min" />
             <Text style={s.sep}>:</Text>
-            <ScrollPicker value={segundos} max={59} onChange={setSegundos} label="seg"      />
+            <ScrollPicker value={segundos} max={59} onChange={setSegundos} label="seg" />
           </View>
-
-          {totalSeg > 0 && (
-            <Text style={s.resumen}>
-              {'Tiempo seleccionado: '}
-              {horas > 0 ? `${horas}h ` : ''}
-              {minutos > 0 ? `${minutos}min ` : ''}
-              {segundos > 0 ? `${segundos}seg` : ''}
-            </Text>
-          )}
         </View>
 
-        {/* Presets rápidos */}
         <View style={s.card}>
-          <Text style={s.cardTitle}>⚡ Tiempos rápidos</Text>
-          <View style={s.presetsRow}>
-            {[
-              { label: '15 min', h: 0, m: 15, s: 0 },
-              { label: '30 min', h: 0, m: 30, s: 0 },
-              { label: '45 min', h: 0, m: 45, s: 0 },
-              { label: '1 hora', h: 1, m: 0,  s: 0 },
-            ].map((p) => {
-              const sel = horas === p.h && minutos === p.m && segundos === p.s;
-              return (
-                <Pressable
-                  key={p.label}
-                  style={[s.presetBtn, sel && s.presetBtnActivo]}
-                  onPress={() => { setHoras(p.h); setMinutos(p.m); setSegundos(p.s); }}
-                >
-                  <Text style={[s.presetText, sel && s.presetTextActivo]}>{p.label}</Text>
-                </Pressable>
-              );
-            })}
+          <Text style={s.cardTitle}>⚙️ Ajustes de Alarma</Text>
+          <View style={s.rowAjuste}>
+            <Text style={s.cardSub}>Vibración al salir</Text>
+            <Switch 
+              value={conVibracion} 
+              onValueChange={setConVibracion}
+              trackColor={{ false: "#cbd5e1", true: "#7dd3fc" }}
+              thumbColor={conVibracion ? "#0c4a6e" : "#f4f3f4"}
+            />
           </View>
+
+          <Text style={[s.cardSub, { marginTop: 10 }]}>Volumen: {Math.round(volumen * 100)}%</Text>
+          <Slider
+            style={{ width: '100%', height: 40 }}
+            minimumValue={0}
+            maximumValue={1}
+            value={volumen}
+            onSlidingComplete={setVolumen}
+            minimumTrackTintColor="#0c4a6e"
+            thumbTintColor="#0369a1"
+          />
         </View>
 
-        {/* Activar */}
-        <Pressable style={s.btnActivar} onPress={guardarYActivar}>
-          <AntDesign name="lock" size={18} color="#fff" />
-          <Text style={s.btnActivarText}>Activar timer y bloquear salida</Text>
+        <Pressable 
+          style={[s.btnActivar, pausado && s.btnReanudar]} 
+          onPress={pausado ? reanudar : guardarYActivar}
+        >
+          <AntDesign name={pausado ? "play" : "lock"} size={20} color="#fff" />
+          <Text style={s.btnActivarText}>
+            {pausado ? 'Reanudar Búnker' : (activo ? 'Reiniciar Tiempo' : 'Activar y Bloquear')}
+          </Text>
         </Pressable>
-
-        <Text style={s.nota}>
-          💡 Una vez activado, el niño no puede salir de la app.{'\n'}
-          Solo tú puedes desactivarlo con tu huella dactilar.
-        </Text>
       </View>
     </View>
   );
 }
 
-// ─── Estilos del ScrollPicker ──────────────────────────────────────────────
 const sp = StyleSheet.create({
-  container: {
-    height: ITEM_H * 3,
-    width: 80,
-    overflow: 'hidden',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  selIndicator: {
-    position: 'absolute',
-    top: ITEM_H,
-    left: 4,
-    right: 4,
-    height: ITEM_H,
-    backgroundColor: '#0c4a6e',
-    borderRadius: 12,
-    zIndex: 0,
-  },
-  item: {
-    height: ITEM_H,
-    width: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1,
-  },
-  numText: {
-    fontSize: 26,
-    fontFamily: 'SlaberlinBold',
-    color: '#94a3b8',
-  },
-  numTextActivo: {
-    color: '#fff',
-    fontSize: 30,
-  },
-  label: {
-    position: 'absolute',
-    bottom: -2,
-    fontSize: 10,
-    fontFamily: 'Slaberlin',
-    color: '#94a3b8',
-  },
+  container: { height: ITEM_H * 3, width: 75, overflow: 'hidden', alignItems: 'center' },
+  selIndicator: { position: 'absolute', top: ITEM_H, left: 0, right: 0, height: ITEM_H, backgroundColor: '#0c4a6e', borderRadius: 12 },
+  item: { height: ITEM_H, width: 75, alignItems: 'center', justifyContent: 'center' },
+  numText: { fontSize: 24, color: '#94a3b8' },
+  numTextActivo: { color: '#fff', fontSize: 28, fontWeight: 'bold' },
+  label: { fontSize: 10, color: '#94a3b8', marginTop: 2 },
 });
 
-// ─── Estilos generales ─────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0369a1',
-    paddingBottom: 16,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    gap: 12,
-  },
-  backBtn: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    padding: 8,
-    borderRadius: 8,
-  },
-  headerTitle: { fontSize: 20, fontFamily: 'PlayChickens', color: '#fff' },
-  headerSub:   { fontSize: 12, fontFamily: 'Slaberlin', color: 'rgba(255,255,255,0.8)', marginTop: 2 },
-  activoBanner: {
-    backgroundColor: '#fef3c7',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: '#fcd34d',
-  },
-  activoBannerText: { fontFamily: 'SlaberlinBold', color: '#92400e', fontSize: 13, flex: 1 },
-  desactivarBtn: { backgroundColor: '#dc2626', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, marginLeft: 10 },
-  desactivarText: { color: '#fff', fontFamily: 'SlaberlinBold', fontSize: 12 },
-  card: { backgroundColor: '#fff', borderRadius: 16, padding: 18, marginBottom: 12, elevation: 1 },
-  cardTitle: { fontSize: 15, fontFamily: 'SlaberlinBold', color: '#0c4a6e', marginBottom: 4 },
-  cardSub: { fontSize: 12, fontFamily: 'Slaberlin', color: '#94a3b8', marginBottom: 14 },
-  carruselRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  sep: { fontSize: 28, fontFamily: 'SlaberlinBold', color: '#cbd5e1', marginBottom: 16 },
-  resumen: { textAlign: 'center', fontFamily: 'Slaberlin', color: '#0369a1', fontSize: 13, marginTop: 12 },
-  presetsRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 4 },
-  presetBtn: { borderWidth: 1.5, borderColor: '#cbd5e1', borderRadius: 50, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#f8fafc' },
-  presetBtnActivo: { backgroundColor: '#0c4a6e', borderColor: '#0c4a6e' },
-  presetText: { fontFamily: 'SlaberlinBold', fontSize: 13, color: '#475569' },
-  presetTextActivo: { color: '#fff' },
-  btnActivar: {
-    backgroundColor: '#0c4a6e',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 16,
-    borderRadius: 50,
-    marginBottom: 12,
-  },
-  btnActivarText: { color: '#fff', fontFamily: 'SlaberlinBold', fontSize: 16 },
-  nota: { textAlign: 'center', fontFamily: 'Slaberlin', color: '#94a3b8', fontSize: 12, lineHeight: 20 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 15 },
+  backBtn: { backgroundColor: '#0369a1', padding: 10, borderRadius: 12 },
+  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#0c4a6e' },
+  activoBanner: { backgroundColor: '#f1f5f9', borderRadius: 16, padding: 18, marginBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#cbd5e1' },
+  pausadoBanner: { backgroundColor: '#fef3c7', borderColor: '#fcd34d' },
+  activoBannerText: { color: '#0c4a6e', fontWeight: 'bold', fontSize: 14 },
+  desactivarBtn: { backgroundColor: '#dc2626', paddingVertical: 10, paddingHorizontal: 15, borderRadius: 10 },
+  desactivarText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
+  card: { backgroundColor: '#fff', borderRadius: 20, padding: 20, marginBottom: 15, elevation: 3 },
+  cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#0c4a6e', marginBottom: 12 },
+  cardSub: { fontSize: 13, color: '#64748b' },
+  rowAjuste: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  carruselRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  sep: { fontSize: 24, fontWeight: 'bold', color: '#cbd5e1', marginHorizontal: 5 },
+  btnActivar: { backgroundColor: '#0c4a6e', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 18, borderRadius: 50, marginTop: 10 },
+  btnReanudar: { backgroundColor: '#d97706' },
+  btnActivarText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 });

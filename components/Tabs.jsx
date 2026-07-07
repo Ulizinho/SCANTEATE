@@ -1,70 +1,74 @@
-import { View, Text, Pressable, Keyboard, Image } from "react-native";
-import { Feather } from "@expo/vector-icons";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { View, Text, Pressable, Keyboard, Image, StyleSheet, Dimensions } from "react-native";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, usePathname } from "expo-router";
 import { useEffect, useState } from "react";
+
+const { width } = Dimensions.get('window');
 
 export default function Tabs() {
   const pathname = usePathname();
   const [isOpen, setOpen] = useState(false);
 
   useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener("keyboardDidShow", () => {
-      setOpen(true);
-    });
-    const keyboardDidHideListener = Keyboard.addListener("keyboardDidHide", () => {
-      setOpen(false);
-    });
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
+    const show = Keyboard.addListener("keyboardDidShow", () => setOpen(true));
+    const hide = Keyboard.addListener("keyboardDidHide", () => setOpen(false));
+    return () => { show.remove(); hide.remove(); };
   }, []);
+
+  if (isOpen) return null;
 
   const isEmotionsActive = pathname === '/emotions' || pathname === '/galery' || pathname === '/report';
   const isHomeActive     = pathname === '/home';
   const isProfileActive  = pathname === '/settings';
 
   return (
-    <View
-      className={`bg-white rounded-t-xl w-screen px-8 py-5 absolute bottom-0 ${
-        isOpen ? "hidden" : ""
-      }`}
-    >
-      <View className="flex items-center justify-between flex-row">
-        <Pressable onPress={() => router.replace("/home")} className="flex items-center">
-          <Feather
-            name="home"
-            size={28}
-            color={isHomeActive ? "#0369a1" : "rgb(107,114,128)"}
-          />
-          <Text className={`${isHomeActive ? "text-sky-800 font-slabold" : "text-gray-500 font-slabold"} text-center`}>
-            Inicio
-          </Text>
+    <View style={styles.container}>
+      <View style={styles.inner}>
+        <Pressable onPress={() => router.replace("/home")} style={styles.tab}>
+          <Feather name="home" size={28} color={isHomeActive ? "#0369a1" : "#6b7280"} />
+          <Text style={[styles.text, isHomeActive && styles.textActive]}>Inicio</Text>
         </Pressable>
 
-        <Pressable onPress={() => router.replace("/emotions")} className="flex items-center justify-center">
-          <Image
-            source={require("../assets/images/SCANTEATE LOGO FIGURA.png")}
-            style={{ width: 33, height: 33 }}
-            resizeMode="contain"
+        <Pressable onPress={() => router.replace("/emotions")} style={styles.tab}>
+          <Image 
+            source={require("../assets/images/SCANTEATE LOGO FIGURA.png")} 
+            style={{ width: 30, height: 30 }} 
+            resizeMode="contain" 
           />
-          <Text className={`${isEmotionsActive ? "text-sky-800 font-slabold" : "text-gray-500 font-slabold"} text-center`}>
-            Emociones
-          </Text>
+          <Text style={[styles.text, isEmotionsActive && styles.textActive]}>Emociones</Text>
         </Pressable>
 
-        <Pressable onPress={() => router.replace("/settings")} className="flex items-center">
-          <MaterialCommunityIcons
-            name="account-circle-outline"
-            size={28}
-            color={isProfileActive ? "#0369a1" : "rgb(107,114,128)"}
-          />
-          <Text className={`${isProfileActive ? "text-sky-800 font-slabold" : "text-gray-500 font-slabold"} text-center`}>
-            Mi Perfil
-          </Text>
+        <Pressable onPress={() => router.replace("/settings")} style={styles.tab}>
+          <MaterialCommunityIcons name="account-circle-outline" size={28} color={isProfileActive ? "#0369a1" : "#6b7280"} />
+          <Text style={[styles.text, isProfileActive && styles.textActive]}>Perfil</Text>
         </Pressable>
       </View>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    bottom: 0,
+    width: width, // Ancho exacto de la pantalla
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    elevation: 20, // Sombra en Android
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+  },
+  inner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  tab: { alignItems: 'center', flex: 1 },
+  text: { fontSize: 12, color: '#6b7280', fontFamily: 'SlaberlinBold' },
+  textActive: { color: '#0369a1' }
+});
